@@ -44,7 +44,7 @@ def load_tle_data():
 def advanced_match(ucs_df, tle_df, name_threshold=85):
     results = []
     for _, ucs_row in ucs_df.iterrows():
-        ucs_name = ucs_row['Name of Satellite, Alternate Names'].strip('"')
+        ucs_name = ucs_row['Name of Satellite, Alternate Names']
         ucs_norad = str(ucs_row.get('NORAD Number', ''))
         ucs_launch = str(ucs_row.get('Date of Launch', '')).split("-")[0]
 
