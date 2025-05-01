@@ -137,7 +137,8 @@ tle_df = load_tle_data()
 
 st.write(f"✅ UCS 衛星数: {len(ucs_df)}、CelesTrak 衛星数: {len(tle_df)}")
 
-threshold = st.slider("名前のマッチング閾値（fuzzy match）", 20, 100, 30, 40, 50, 60, 70)
+threshold = st.slider("名前のマッチング閾値（fuzzy match）", min_value=20, max_value=100, value=60, step=5)
+
 
 if st.button("マッチングを実行"):
     st.write("🔄 マッチングを実行中...")
