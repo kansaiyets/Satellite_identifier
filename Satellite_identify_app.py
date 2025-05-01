@@ -4,7 +4,7 @@ import requests
 from io import StringIO
 from rapidfuzz import fuzz, process
 
-st.title("UCS × CelesTrak 衛星対応表作成ツール（NORAD ID + 名前 + 打上日で精度向上）")
+st.title("UCS × CelesTrak 衛星対応表作成ツール")
 
 # ------------------------------
 # データ取得と整形
