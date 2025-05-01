@@ -41,16 +41,25 @@ def load_tle_data():
     return pd.DataFrame(satellites)
 
 # ------------------------------
-# マッチング処理
+# マッチング処理（確認出力付き）
 # ------------------------------
 def advanced_match(ucs_df, tle_df, name_threshold=85):
     results = []
-    for _, ucs_row in ucs_df.iterrows():
-        ucs_name = ucs_row['Name of Satellite, Alternate Names']
+    for idx, ucs_row in ucs_df.iterrows():
+        try:
+            ucs_name = ucs_row['Name of Satellite, Alternate Names']
+        except KeyError as e:
+            st.error(f"❌ UCSデータに 'Name of Satellite, Alternate Names' 列が存在しません。利用可能な列: {list(ucs_row.index)}")
+            raise e
+
         ucs_norad = str(ucs_row.get('NORAD Number', '')).strip()
         ucs_launch = str(ucs_row.get('Date of Launch', '')).split("-")[0]
 
-        # 1. NORAD完全一致
+        # 🟡 確認用出力
+        st.write(f"🔍 UCS Name: {ucs_name} / NORAD: {ucs_norad} / Launch Year: {ucs_launch}")
+        st.write(f"🧾 TLE Names (先頭5件): {tle_df['tle_name'].head().tolist()}")
+
+        # 1. NORAD一致
         match_norad = tle_df[tle_df['norad_id'] == ucs_norad]
         if not match_norad.empty:
             row = match_norad.iloc[0]
@@ -67,7 +76,12 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
             continue
 
         # 2. ファジーマッチ
-        best_name, score = process.extractOne(ucs_name, tle_df['tle_name'], scorer=fuzz.token_sort_ratio)
+        try:
+            best_name, score = process.extractOne(ucs_name, tle_df['tle_name'], scorer=fuzz.token_sort_ratio)
+        except Exception as e:
+            st.error(f"❌ extractOne でエラーが発生しました: {e}")
+            raise e
+
         if score >= name_threshold:
             row = tle_df[tle_df['tle_name'] == best_name].iloc[0]
             results.append({
@@ -92,6 +106,10 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
                 "line2": None
             })
 
+        # デモ目的で最初の3件だけに制限（コメントアウトすれば全件処理）
+        if idx >= 2:
+            break
+
     return pd.DataFrame(results)
 
 # ------------------------------
@@ -109,7 +127,7 @@ if st.button("マッチングを実行"):
     result_df = advanced_match(ucs_df, tle_df, threshold)
     st.success("✅ マッチング完了！")
 
-    st.dataframe(result_df.head(20))
+    st.dataframe(result_df)
 
     csv = result_df.to_csv(index=False).encode("utf-8")
     st.download_button("CSVをダウンロード", data=csv, file_name="matched_satellites.csv", mime="text/csv")
