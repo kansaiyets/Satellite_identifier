@@ -54,8 +54,8 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
         ucs_norad = str(ucs_row.get('NORAD Number', ''))
         ucs_launch = str(ucs_row.get('Date of Launch', '')).split("-")[0]
 
-        st.write(f"🔍 UCS Name: {ucs_name} / NORAD: {ucs_norad} / Launch Year: {ucs_launch}")
-        st.write(f"🧾 TLE Names (先頭5件): {tle_df['tle_name'].head().tolist()}")
+#        st.write(f"🔍 UCS Name: {ucs_name} / NORAD: {ucs_norad} / Launch Year: {ucs_launch}")
+#        st.write(f"🧾 TLE Names (先頭5件): {tle_df['tle_name'].head().tolist()}")
 
         # 1. NORAD一致
         tle_match = tle_df[tle_df['norad_id'] == ucs_norad]
@@ -102,7 +102,7 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
                         "line2": None
                     })
             else:
-                st.warning(f"⚠️ extractOne に一致が見つかりませんでした: {ucs_name}")
+#                st.warning(f"⚠️ extractOne に一致が見つかりませんでした: {ucs_name}")
                 results.append({
                     "UCS Name": ucs_name,
                     "UCS NORAD": ucs_norad,
@@ -114,7 +114,7 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
                     "line2": None
                 })
         except Exception as e:
-            st.error(f"❌ extractOne でエラーが発生しました: {e}")
+#            st.error(f"❌ extractOne でエラーが発生しました: {e}")
             results.append({
                 "UCS Name": ucs_name,
                 "UCS NORAD": ucs_norad,
