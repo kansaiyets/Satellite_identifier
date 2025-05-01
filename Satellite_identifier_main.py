@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from io import StringIO
-from fuzzywuzzy import fuzz, process
+from rapidfuzz import fuzz, process
 
 st.title("UCS × CelesTrak 衛星対応表作成ツール（NORAD ID + 名前 + 打上日で精度向上）")
 
