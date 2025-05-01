@@ -12,15 +12,14 @@ def load_ucs_data():
     url = "https://www.ucsusa.org/sites/default/files/2024-01/UCS-Satellite-Database%205-1-2023%20%28text%29.txt"
     data = requests.get(url).content.decode("utf-8", errors="ignore")
     df = pd.read_csv(StringIO(data), sep="\t")
-    df.columns = df.columns.str.strip('"')  # ← 重要：列名のダブルクォートを除去
+    df.columns = df.columns.str.strip('"')  # 列名の余分なダブルクォートを削除
     return df
 
 @st.cache_data
 def load_tle_data():
     url = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
     data = requests.get(url).text.strip().splitlines()
-    # 3行ごとの1行目（衛星名）だけ取り出す
-    names = [data[i].strip() for i in range(0, len(data), 3)]
+    names = [data[i].strip() for i in range(0, len(data), 3)]  # 3行ごとに1つの名前
     return pd.DataFrame({'tle_name': names})
 
 def extract_year(date_str):
@@ -42,17 +41,15 @@ def advanced_match(ucs_df, tle_df, threshold=80):
         st.write(f"🧾 TLE Names (先頭5件): {tle_df['tle_name'].head().tolist()}")
 
         try:
-            # `extractOne` の結果を安全にアンパック
             match = process.extractOne(
                 ucs_name,
                 tle_df['tle_name'],
                 scorer=fuzz.token_sort_ratio
             )
 
-            # マッチが見つかった場合
-            if match:
-                best_name, score = match if isinstance(match, tuple) else (None, 0)
-                if best_name is not None and score >= threshold:
+            if match and isinstance(match, tuple) and len(match) == 2:
+                best_name, score = match
+                if score >= threshold:
                     results.append({
                         "UCS Name": ucs_name,
                         "TLE Name": best_name,
@@ -60,7 +57,7 @@ def advanced_match(ucs_df, tle_df, threshold=80):
                         "Launch Year": ucs_year
                     })
                 else:
-                    st.warning(f"⚠️ 類似度が閾値未満: {ucs_name} → {best_name} ({score})")
+                    st.warning(f"⚠️ 類似度がしきい値未満: {ucs_name} → {best_name} ({score})")
             else:
                 st.warning(f"⚠️ マッチが見つかりませんでした: {ucs_name}")
 
@@ -69,9 +66,9 @@ def advanced_match(ucs_df, tle_df, threshold=80):
 
     return pd.DataFrame(results)
 
-# -----------------------------
+# ------------------------------
 # メイン処理
-# -----------------------------
+# ------------------------------
 
 ucs_df = load_ucs_data()
 tle_df = load_tle_data()
@@ -79,7 +76,7 @@ tle_df = load_tle_data()
 threshold = st.slider("🎚 類似度のしきい値", min_value=50, max_value=100, value=85, step=1)
 
 if st.button("🔍 マッチング開始"):
-    st.info("マッチング処理中...（少し時間がかかる場合があります）")
+    st.info("マッチング処理中...お待ちください。")
     result_df = advanced_match(ucs_df, tle_df, threshold)
     st.success(f"✅ マッチング完了！ {len(result_df)} 件が見つかりました。")
     st.dataframe(result_df)
