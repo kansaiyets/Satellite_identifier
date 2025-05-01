@@ -42,14 +42,17 @@ def advanced_match(ucs_df, tle_df, threshold=80):
         st.write(f"🧾 TLE Names (先頭5件): {tle_df['tle_name'].head().tolist()}")
 
         try:
+            # `extractOne` の結果を安全にアンパック
             match = process.extractOne(
                 ucs_name,
                 tle_df['tle_name'],
                 scorer=fuzz.token_sort_ratio
             )
-            if match is not None:
-                best_name, score = match
-                if score >= threshold:
+
+            # マッチが見つかった場合
+            if match:
+                best_name, score = match if isinstance(match, tuple) else (None, 0)
+                if best_name is not None and score >= threshold:
                     results.append({
                         "UCS Name": ucs_name,
                         "TLE Name": best_name,
@@ -59,7 +62,7 @@ def advanced_match(ucs_df, tle_df, threshold=80):
                 else:
                     st.warning(f"⚠️ 類似度が閾値未満: {ucs_name} → {best_name} ({score})")
             else:
-                st.error(f"❌ extractOneが None を返しました: {ucs_name}")
+                st.warning(f"⚠️ マッチが見つかりませんでした: {ucs_name}")
 
         except Exception as e:
             st.error(f"❌ マッチングエラー: {ucs_name} / エラー内容: {e}")
