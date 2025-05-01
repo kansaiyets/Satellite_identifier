@@ -44,7 +44,7 @@ def load_tle_data():
 def advanced_match(ucs_df, tle_df, name_threshold=85):
     results = []
     for _, ucs_row in ucs_df.iterrows():
-        ucs_name = ucs_row['Satellite Name']
+        ucs_name = ucs_row['Name of Satellite']  # 修正：列名を 'Name of Satellite' に変更
         ucs_norad = str(ucs_row.get('NORAD Number', ''))
         ucs_launch = str(ucs_row.get('Date of Launch', '')).split("-")[0]
 
