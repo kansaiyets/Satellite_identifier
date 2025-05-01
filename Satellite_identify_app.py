@@ -34,7 +34,6 @@ def load_tle_data():
             line2 = lines[i+2].strip()
             norad_id = line1[2:7].strip()
             epoch_year_code = line1[18:20]
-            # TLEの年コードを西暦に変換
             if epoch_year_code.isdigit():
                 epoch_year = int(epoch_year_code)
                 epoch_year_full = 2000 + epoch_year if epoch_year < 57 else 1900 + epoch_year
@@ -54,6 +53,7 @@ def load_tle_data():
 # ------------------------------
 def advanced_match(ucs_df, tle_df, name_threshold=60):
     results = []
+    match_count = 0
     for _, ucs_row in ucs_df.iterrows():
         ucs_name = ucs_row['Name of Satellite, Alternate Names']
         ucs_norad = str(ucs_row.get('NORAD Number', '')).strip()
@@ -63,10 +63,11 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
         except:
             ucs_launch_year = None
 
-        # 1. NORAD一致（年の検証はしない）
+        # 1. NORAD一致（年チェックなし）
         tle_match = tle_df[tle_df['norad_id'] == ucs_norad]
         if not tle_match.empty:
             matched_row = tle_match.iloc[0]
+            match_count += 1
             results.append({
                 "UCS Name": ucs_name,
                 "UCS NORAD": ucs_norad,
@@ -88,13 +89,13 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
                 matched_row = tle_df[tle_df['tle_name'] == best_name].iloc[0]
                 tle_epoch_year = matched_row['epoch_year']
 
-                # 年の一致確認：TLEのエポック年 < UCSの打ち上げ年 → 無効
                 if ucs_launch_year is not None and tle_epoch_year is not None:
                     valid_year = tle_epoch_year >= ucs_launch_year
                 else:
-                    valid_year = True  # UCS側の年が不明ならOK
+                    valid_year = True  # UCS側が不明ならOK
 
                 if score >= name_threshold and valid_year:
+                    match_count += 1
                     results.append({
                         "UCS Name": ucs_name,
                         "UCS NORAD": ucs_norad,
@@ -143,7 +144,8 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
                 "line2": None
             })
 
-    return pd.DataFrame(results)
+    result_df = pd.DataFrame(results)
+    return result_df, match_count
 
 # ------------------------------
 # 実行
@@ -158,8 +160,10 @@ threshold = st.slider("名前のマッチング閾値（fuzzy match）", 20, 100
 
 if st.button("マッチングを実行"):
     st.write("🔄 マッチングを実行中...")
-    result_df = advanced_match(ucs_df, tle_df, threshold)
+    result_df, match_count = advanced_match(ucs_df, tle_df, threshold)
     st.success("✅ マッチング完了！")
+
+    st.write(f"🔎 マッチ件数: {match_count} 件 / {len(ucs_df)} UCS 衛星中")
 
     st.dataframe(result_df.head(50))
 
