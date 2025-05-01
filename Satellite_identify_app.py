@@ -15,7 +15,7 @@ def load_ucs_data():
     data = requests.get(url).content.decode("utf-8", errors="ignore")
     df = pd.read_csv(StringIO(data), sep="\t")
 
-    # ダブルクォーテーションが列名や値についている場合の処理
+    # ダブルクォーテーション除去
     df.columns = [col.strip().strip('"') for col in df.columns]
     df = df.applymap(lambda x: x.strip('"') if isinstance(x, str) else x)
 
@@ -32,8 +32,9 @@ def load_tle_data():
             name = lines[i].strip()
             line1 = lines[i+1].strip()
             line2 = lines[i+2].strip()
-            norad_id = line1[2:7].strip()  # NORAD番号はTLE行1の3～7桁目
-            launch_year = "20" + line1[18:20] if int(line1[18:20]) < 50 else "19" + line1[18:20]
+            norad_id = line1[2:7].strip()
+            year_code = line1[18:20]
+            launch_year = "20" + year_code if int(year_code) < 50 else "19" + year_code
             satellites.append({
                 "tle_name": name,
                 "norad_id": norad_id,
@@ -53,11 +54,10 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
         ucs_norad = str(ucs_row.get('NORAD Number', ''))
         ucs_launch = str(ucs_row.get('Date of Launch', '')).split("-")[0]
 
-        # デバッグ表示
         st.write(f"🔍 UCS Name: {ucs_name} / NORAD: {ucs_norad} / Launch Year: {ucs_launch}")
         st.write(f"🧾 TLE Names (先頭5件): {tle_df['tle_name'].head().tolist()}")
 
-        # 1. NORADで完全一致
+        # 1. NORAD一致
         tle_match = tle_df[tle_df['norad_id'] == ucs_norad]
         if not tle_match.empty:
             matched_row = tle_match.iloc[0]
@@ -73,28 +73,42 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
             })
             continue
 
-        # 2. 名前のファジーマッチ（しきい値以上）
+        # 2. 名前のファジーマッチ
         try:
-            best_name, score, _ = process.extractOne(ucs_name, tle_df['tle_name'], scorer=fuzz.token_sort_ratio)
-            if score >= name_threshold:
-                matched_row = tle_df[tle_df['tle_name'] == best_name].iloc[0]
-                results.append({
-                    "UCS Name": ucs_name,
-                    "UCS NORAD": ucs_norad,
-                    "TLE Name": matched_row['tle_name'],
-                    "Match Type": "名前類似",
-                    "Fuzzy Score": score,
-                    "Launch Year Match": ucs_launch == matched_row['launch_year'],
-                    "line1": matched_row['line1'],
-                    "line2": matched_row['line2']
-                })
+            match = process.extractOne(ucs_name, tle_df['tle_name'], scorer=fuzz.token_sort_ratio)
+            if match is not None:
+                best_name, score, _ = match
+                if score >= name_threshold:
+                    matched_row = tle_df[tle_df['tle_name'] == best_name].iloc[0]
+                    results.append({
+                        "UCS Name": ucs_name,
+                        "UCS NORAD": ucs_norad,
+                        "TLE Name": matched_row['tle_name'],
+                        "Match Type": "名前類似",
+                        "Fuzzy Score": score,
+                        "Launch Year Match": ucs_launch == matched_row['launch_year'],
+                        "line1": matched_row['line1'],
+                        "line2": matched_row['line2']
+                    })
+                else:
+                    results.append({
+                        "UCS Name": ucs_name,
+                        "UCS NORAD": ucs_norad,
+                        "TLE Name": None,
+                        "Match Type": "一致なし",
+                        "Fuzzy Score": score,
+                        "Launch Year Match": False,
+                        "line1": None,
+                        "line2": None
+                    })
             else:
+                st.warning(f"⚠️ extractOne に一致が見つかりませんでした: {ucs_name}")
                 results.append({
                     "UCS Name": ucs_name,
                     "UCS NORAD": ucs_norad,
                     "TLE Name": None,
-                    "Match Type": "一致なし",
-                    "Fuzzy Score": score,
+                    "Match Type": "一致なし（None）",
+                    "Fuzzy Score": None,
                     "Launch Year Match": False,
                     "line1": None,
                     "line2": None
@@ -115,7 +129,7 @@ def advanced_match(ucs_df, tle_df, name_threshold=85):
     return pd.DataFrame(results)
 
 # ------------------------------
-# 実行部分
+# 実行
 # ------------------------------
 st.write("データを読み込み中...")
 ucs_df = load_ucs_data()
