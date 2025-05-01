@@ -33,12 +33,17 @@ def load_tle_data():
             line1 = lines[i+1].strip()
             line2 = lines[i+2].strip()
             norad_id = line1[2:7].strip()
-            year_code = line1[18:20]
-            launch_year = "20" + year_code if int(year_code) < 50 else "19" + year_code
+            epoch_year_code = line1[18:20]
+            # TLEの年コードを西暦に変換
+            if epoch_year_code.isdigit():
+                epoch_year = int(epoch_year_code)
+                epoch_year_full = 2000 + epoch_year if epoch_year < 57 else 1900 + epoch_year
+            else:
+                epoch_year_full = None
             satellites.append({
                 "tle_name": name,
                 "norad_id": norad_id,
-                "launch_year": launch_year,
+                "epoch_year": epoch_year_full,
                 "line1": line1,
                 "line2": line2
             })
@@ -51,10 +56,14 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
     results = []
     for _, ucs_row in ucs_df.iterrows():
         ucs_name = ucs_row['Name of Satellite, Alternate Names']
-        ucs_norad = str(ucs_row.get('NORAD Number', ''))
-        ucs_launch = str(ucs_row.get('Date of Launch', '')).split("-")[0]  # 年を取り出す
+        ucs_norad = str(ucs_row.get('NORAD Number', '')).strip()
+        ucs_launch = str(ucs_row.get('Date of Launch', '')).strip()
+        try:
+            ucs_launch_year = int(ucs_launch.split("-")[0])
+        except:
+            ucs_launch_year = None
 
-        # 1. NORAD ID が一致すれば、その他は無視して一致とする
+        # 1. NORAD一致（年の検証はしない）
         tle_match = tle_df[tle_df['norad_id'] == ucs_norad]
         if not tle_match.empty:
             matched_row = tle_match.iloc[0]
@@ -64,51 +73,48 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
                 "TLE Name": matched_row['tle_name'],
                 "Match Type": "NORAD一致",
                 "Fuzzy Score": None,
-                "Launch Year Match": True,  # NORAD ID が一致すれば年も一致扱い
+                "Epoch Year": matched_row['epoch_year'],
+                "Valid Year Match": True,
                 "line1": matched_row['line1'],
                 "line2": matched_row['line2']
             })
             continue
 
-        # 2. 名前のファジーマッチ + 打ち上げ年が一致
+        # 2. 名前のファジーマッチ + 年一致判定
         try:
             match = process.extractOne(ucs_name, tle_df['tle_name'], scorer=fuzz.token_sort_ratio)
             if match is not None:
                 best_name, score, _ = match
-                if score >= name_threshold:
-                    matched_row = tle_df[tle_df['tle_name'] == best_name].iloc[0]
-                    launch_year_match = ucs_launch == matched_row['launch_year']  # 打ち上げ年をチェック
+                matched_row = tle_df[tle_df['tle_name'] == best_name].iloc[0]
+                tle_epoch_year = matched_row['epoch_year']
 
-                    if launch_year_match:
-                        results.append({
-                            "UCS Name": ucs_name,
-                            "UCS NORAD": ucs_norad,
-                            "TLE Name": matched_row['tle_name'],
-                            "Match Type": "名前類似 + 年一致",
-                            "Fuzzy Score": score,
-                            "Launch Year Match": True,
-                            "line1": matched_row['line1'],
-                            "line2": matched_row['line2']
-                        })
-                    else:
-                        results.append({
-                            "UCS Name": ucs_name,
-                            "UCS NORAD": ucs_norad,
-                            "TLE Name": None,
-                            "Match Type": "名前類似（年不一致）",
-                            "Fuzzy Score": score,
-                            "Launch Year Match": False,
-                            "line1": None,
-                            "line2": None
-                        })
+                # 年の一致確認：TLEのエポック年 < UCSの打ち上げ年 → 無効
+                if ucs_launch_year is not None and tle_epoch_year is not None:
+                    valid_year = tle_epoch_year >= ucs_launch_year
+                else:
+                    valid_year = True  # UCS側の年が不明ならOK
+
+                if score >= name_threshold and valid_year:
+                    results.append({
+                        "UCS Name": ucs_name,
+                        "UCS NORAD": ucs_norad,
+                        "TLE Name": matched_row['tle_name'],
+                        "Match Type": "名前類似",
+                        "Fuzzy Score": score,
+                        "Epoch Year": tle_epoch_year,
+                        "Valid Year Match": valid_year,
+                        "line1": matched_row['line1'],
+                        "line2": matched_row['line2']
+                    })
                 else:
                     results.append({
                         "UCS Name": ucs_name,
                         "UCS NORAD": ucs_norad,
                         "TLE Name": None,
-                        "Match Type": "名前類似（スコア不足）",
+                        "Match Type": "一致なし（年不一致または閾値未満）",
                         "Fuzzy Score": score,
-                        "Launch Year Match": False,
+                        "Epoch Year": tle_epoch_year,
+                        "Valid Year Match": valid_year,
                         "line1": None,
                         "line2": None
                     })
@@ -119,7 +125,8 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
                     "TLE Name": None,
                     "Match Type": "一致なし（None）",
                     "Fuzzy Score": None,
-                    "Launch Year Match": False,
+                    "Epoch Year": None,
+                    "Valid Year Match": False,
                     "line1": None,
                     "line2": None
                 })
@@ -128,9 +135,10 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
                 "UCS Name": ucs_name,
                 "UCS NORAD": ucs_norad,
                 "TLE Name": None,
-                "Match Type": "エラー",
+                "Match Type": f"エラー: {e}",
                 "Fuzzy Score": None,
-                "Launch Year Match": False,
+                "Epoch Year": None,
+                "Valid Year Match": False,
                 "line1": None,
                 "line2": None
             })
@@ -141,29 +149,20 @@ def advanced_match(ucs_df, tle_df, name_threshold=60):
 # 実行
 # ------------------------------
 st.write("データを読み込み中...")
-
-# UCSとTLEデータを読み込む
 ucs_df = load_ucs_data()
 tle_df = load_tle_data()
 
 st.write(f"✅ UCS 衛星数: {len(ucs_df)}、CelesTrak 衛星数: {len(tle_df)}")
 
-# 名前のマッチング閾値をスライダーで設定
 threshold = st.slider("名前のマッチング閾値（fuzzy match）", 20, 100, 60)
 
-# マッチングを実行するボタン
 if st.button("マッチングを実行"):
     st.write("🔄 マッチングを実行中...")
-    
-    # マッチング処理実行
     result_df = advanced_match(ucs_df, tle_df, threshold)
-    
     st.success("✅ マッチング完了！")
 
-    # 結果を表示
-    st.dataframe(result_df.head(20))
+    st.dataframe(result_df.head(50))
 
-    # 結果をCSVとしてダウンロードできるようにする
     csv = result_df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="📥 CSVファイルとしてダウンロード",
